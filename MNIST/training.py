@@ -1,13 +1,14 @@
 
 import torch
 import torch.nn as nn
+from torch.utils.tensorboard import SummaryWriter
 
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
 _cross_entropy_loss = nn.CrossEntropyLoss()
 
 
-def train_loop(train_dataloader, model, optimizer, val_dataloader = None, num_epochs = 10, verbose = False):
+def train_loop(train_dataloader, model, optimizer, val_dataloader = None, num_epochs = 10, verbose = False, writer: SummaryWriter | None = None):
     train_loss_history = []
     train_accuracy_history = []
 
@@ -21,6 +22,10 @@ def train_loop(train_dataloader, model, optimizer, val_dataloader = None, num_ep
             print(f"Epoch {epoch+1}/{num_epochs}")
             print(f"Train loss: {epoch_loss:>7f}, accuracy: {100*epoch_accuracy:>0.2f}%")
 
+        if writer:
+            writer.add_scalar("Train loss", epoch_loss, epoch)
+            writer.add_scalar("Train accuracy", epoch_accuracy, epoch)
+
         train_loss_history.append(epoch_loss)
         train_accuracy_history.append(epoch_accuracy)
 
@@ -29,6 +34,10 @@ def train_loop(train_dataloader, model, optimizer, val_dataloader = None, num_ep
 
             if verbose:
                 print(f"Validation loss:  {epoch_loss:>7f}, accuracy: {100*epoch_accuracy:>0.2f}%")
+
+            if writer:
+                writer.add_scalar("Validation loss", epoch_loss, epoch)
+                writer.add_scalar("Validation accuracy", epoch_accuracy, epoch)
 
             test_loss_history.append(epoch_loss)
             test_accuracy_history.append(epoch_accuracy)
