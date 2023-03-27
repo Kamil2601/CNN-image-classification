@@ -109,3 +109,5 @@ def test_model(dataloader, model, verbose = True):
         return test_loss/size, correct/size
     
 
+# def test_model_simple(dataset, model, verbose = True):
+#     data = 
