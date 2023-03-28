@@ -8,7 +8,9 @@ device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 _cross_entropy_loss = nn.CrossEntropyLoss()
 
 
-def train_loop(train_dataloader, model, optimizer, val_dataloader = None, num_epochs = 10, verbose = False, writer: SummaryWriter | None = None):
+def train_loop(train_dataloader, model, optimizer, binary=False, val_dataloader = None, num_epochs = 10, verbose = False, writer: SummaryWriter | None = None):
+    model = model.to(device)
+    
     train_loss_history = []
     train_accuracy_history = []
 
@@ -16,7 +18,7 @@ def train_loop(train_dataloader, model, optimizer, val_dataloader = None, num_ep
     test_accuracy_history = []
 
     for epoch in range(num_epochs):
-        epoch_loss, epoch_accuracy = train_one_epoch(train_dataloader, model, optimizer)
+        epoch_loss, epoch_accuracy = train_one_epoch(train_dataloader, model, optimizer, binary)
 
         if verbose:
             print(f"Epoch {epoch+1}/{num_epochs}")
@@ -30,7 +32,7 @@ def train_loop(train_dataloader, model, optimizer, val_dataloader = None, num_ep
         train_accuracy_history.append(epoch_accuracy)
 
         if val_dataloader:
-            epoch_loss, epoch_accuracy = test_model(val_dataloader, model, verbose=False)
+            epoch_loss, epoch_accuracy = test_model(val_dataloader, model, verbose=False, binary=binary)
 
             if verbose:
                 print(f"Validation loss:  {epoch_loss:>7f}, accuracy: {100*epoch_accuracy:>0.2f}%")
@@ -56,24 +58,31 @@ def train_loop(train_dataloader, model, optimizer, val_dataloader = None, num_ep
 
 
 
-def train_one_epoch(dataloader, model, optimizer):
+def train_one_epoch(dataloader, model, optimizer, binary=False):
     model.train()
     epoch_loss = 0
     correct = 0
+
+    if binary:
+        loss_fn = nn.functional.binary_cross_entropy_with_logits
+        pred_fn = lambda y_hat: y_hat > 0
+    else:
+        loss_fn = nn.functional.cross_entropy
+        pred_fn = lambda y_hat: torch.argmax(y_hat, dim = 1)
 
     for (X, y) in dataloader:
         # Compute prediction and loss
         X = X.to(device)
         y = y.to(device)
         out = model(X)
-        loss = _cross_entropy_loss(out, y)
+        loss = loss_fn(out, y)
 
         # Backpropagation
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        pred = torch.argmax(out, dim=1)
+        pred = pred_fn(out)
         correct += (pred == y).sum().item()
         epoch_loss += loss.item() * y.shape[0]
         
@@ -84,11 +93,16 @@ def train_one_epoch(dataloader, model, optimizer):
 
 
 
-def test_model(dataloader, model, verbose = True):
+def test_model(dataloader, model, verbose = True, binary=False):
     size = len(dataloader.dataset)
     model.eval()
 
-    loss_fn = nn.CrossEntropyLoss(reduction="sum")
+    if binary:
+        loss_fn = nn.BCEWithLogitsLoss(reduction='sum')
+        pred_fn = lambda y_hat: y_hat > 0
+    else:
+        loss_fn = nn.CrossEntropyLoss(reduction='sum')
+        pred_fn = lambda y_hat: torch.argmax(y_hat, dim = 1)
 
     test_loss, correct = 0, 0
 
@@ -99,7 +113,7 @@ def test_model(dataloader, model, verbose = True):
 
             out = model(X)
             test_loss += loss_fn(out, y).item()
-            pred = torch.argmax(out, dim=1)
+            pred = pred_fn(out)
             correct += (pred == y).sum().item()
 
         if verbose:
@@ -108,6 +122,3 @@ def test_model(dataloader, model, verbose = True):
     if not verbose:
         return test_loss/size, correct/size
     
-
-# def test_model_simple(dataset, model, verbose = True):
-#     data = 
